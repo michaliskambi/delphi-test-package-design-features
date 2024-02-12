@@ -164,7 +164,42 @@ begin
 end;
 
 procedure TTestDelphiIdeIntegration.ClickAddPaths(Sender: TObject);
+var
+  OptionName: TOTAOptionName;
+  ProjectOptions: IOTAProjectOptions;
+  Report: TStringList;
+  ReportFileName, ValueStr: String;
 begin
+  Report := TStringList.Create;
+  try
+    ProjectOptions := GetActiveProject.ProjectOptions;
+
+    for OptionName in ProjectOptions.GetOptionNames do
+    begin
+      try
+        ValueStr := ProjectOptions.Values[OptionName.Name];
+      except
+        ValueStr := 'Error reading as String';
+      end;
+      Report.Append(Format('%s: %s', [
+        OptionName.Name,
+        ValueStr
+      ]));
+    end;
+
+    ReportFileName := 'c:/tmp/' + IntToStr(Random(100000));
+
+    ShowMessage(Format('Found %d project options, saving to %s', [
+      Length(ProjectOptions.GetOptionNames),
+      ReportFileName
+    ]));
+
+    { Show message before actually writing to ReportFileName,
+      so that user knows what's going on in case of error
+      at writing (e.g. before directory doesn't exist or is read-only). }
+
+    Report.SaveToFile(ReportFileName);
+  finally FreeAndNil(Report) end;
 end;
 
 procedure TTestDelphiIdeIntegration.ClickRemovePaths(Sender: TObject);
