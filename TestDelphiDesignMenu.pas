@@ -178,9 +178,10 @@ var
 
 procedure Register;
 begin
+  // Seems not necessary in the end.
   { Without this, package is loaded (and so menu items added) only once
     CGE component is accessed. }
-  ForceDemandLoadState(dlDisable);
+  //ForceDemandLoadState(dlDisable);
 end;
 
 initialization
