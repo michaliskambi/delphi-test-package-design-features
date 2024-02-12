@@ -1,3 +1,4 @@
+{ Manage menu "Tools -> Test Castle Game Engine" in Delphi IDE. }
 unit TestDelphiDesignMenu;
 
 interface
