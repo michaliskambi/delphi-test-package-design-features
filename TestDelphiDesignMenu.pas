@@ -7,8 +7,8 @@ procedure Register;
 
 implementation
 
-uses SysUtils, Classes,
-  DesignIntf, ToolsAPI, // design-time only unit
+uses SysUtils, Classes, Registry,
+  DesignIntf, ToolsAPI, PlatformConst, // design-time only units
   Vcl.Menus, Vcl.Dialogs;
 
 { Simplest possible log that will work and be persistent, no matter what state
@@ -32,9 +32,10 @@ end;
 type
   TTestDelphiIdeIntegration = class(TComponent)
   strict private
-    MenuMyRoot, MenuDebugProjectOptions, MenuDebugGlobalOptions: TMenuItem;
+    MenuMyRoot: TMenuItem;
     procedure ClickDebugProjectOptions(Sender: TObject);
     procedure ClickDebugGlobalOptions(Sender: TObject);
+    procedure ClickDebugGlobalOptionsRegistry(Sender: TObject);
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -58,6 +59,7 @@ constructor TTestDelphiIdeIntegration.Create(AOwner: TComponent);
 
 var
   Services: INTAServices;
+  MenuDebugProjectOptions, MenuDebugGlobalOptions, MenuDebugGlobalOptionsRegistry: TMenuItem;
 begin
   inherited;
 
@@ -74,6 +76,10 @@ begin
   MenuDebugGlobalOptions := TMenuItem.Create(nil);
   MenuDebugGlobalOptions.Caption := 'Debug Global Options';
   MenuDebugGlobalOptions.OnClick := ClickDebugGlobalOptions;
+
+  MenuDebugGlobalOptionsRegistry := TMenuItem.Create(nil);
+  MenuDebugGlobalOptionsRegistry.Caption := 'Debug Global Options Using Registry';
+  MenuDebugGlobalOptionsRegistry.OnClick := ClickDebugGlobalOptionsRegistry;
 
   MenuMyRoot := TMenuItem.Create(nil);
   MenuMyRoot.Caption := 'Test Package Menu';
@@ -102,6 +108,7 @@ begin
     There doesn't seem to be any difference. }
   Services.AddActionMenu('TestCastleGameEngineMenu', nil, MenuDebugProjectOptions, true, true);
   Services.AddActionMenu('TestCastleGameEngineMenu', nil, MenuDebugGlobalOptions, true, true);
+  Services.AddActionMenu('TestCastleGameEngineMenu', nil, MenuDebugGlobalOptionsRegistry, true, true);
 end;
 
 destructor TTestDelphiIdeIntegration.Destroy;
@@ -216,6 +223,83 @@ begin
 
     Report.SaveToFile(ReportFileName);
   finally FreeAndNil(Report) end;
+end;
+
+procedure TTestDelphiIdeIntegration.ClickDebugGlobalOptionsRegistry(Sender: TObject);
+
+{ IOTAEnvironmentOptions is broken for platform-specific options,
+  it allows only to get / set LibraryPath for a random platform,
+  not all platforms.
+  There are multiple "LibraryPath" names,
+  and we can only query for random "LibraryPath" value using ToolsAPI.
+  See http://www.devsuperpage.com/search/Articles.aspx?G=2&ArtID=37222
+
+  So we try alternative: use registry.
+}
+
+const
+  RegSearchPath = 'Search Path';
+var
+  Services: IOTAServices;
+  RegKey, RegKeyPlatform: String;
+  PlatformName, LibraryPath, FixedPlatformName: String;
+  Reg: TRegistry;
+  Report: TStringList;
+begin
+  if not Supports(BorlandIDEServices, IOTAServices, Services) then
+    raise Exception.Create('Cannot access IOTAServices');
+
+  Report := TStringList.Create;
+  try
+    RegKey := Services.GetBaseRegistryKey;
+
+    Reg := TRegistry.Create;
+    try
+      for PlatformName in GetAllPlatforms do
+      begin
+        // 32-bit Android platform name in registry differs
+        if PlatformName = 'Android' then
+          FixedPlatformName := 'Android32'
+        else
+          FixedPlatformName := PlatformName;
+        RegKeyPlatform := IncludeTrailingPathDelimiter(RegKey) +
+          'Library\' + FixedPlatformName;
+        if not Reg.OpenKey(RegKeyPlatform, false) then
+        begin
+          //ShowMessageFmt('Cannot open registry key of Delphi IDE %s', [RegKeyPlatform]);
+          Report.Append(Format('%s (%s): %s', [
+            PlatformName,
+            RegKeyPlatform,
+            'not available'
+          ]));
+          Continue;
+        end;
+
+        LibraryPath := Reg.ReadString(RegSearchPath);
+        Report.Append(Format('%s (%s): %s', [
+          PlatformName,
+          RegKeyPlatform,
+          LibraryPath
+        ]));
+
+        // uncomment to test writing; requires Delphi restart to see new values
+        // LibraryPath := LibraryPath + ';c:/test';
+        // Reg.WriteString(RegSearchPath, LibraryPath);
+
+        Reg.CloseKey;
+      end;
+    finally
+      FreeAndNil(Reg);
+    end;
+    WritelnLog('Library paths from registry: ' + Report.Text);
+  finally
+    FreeAndNil(Report);
+  end;
+
+  ShowMessage(Format('Got library paths from %s for %d platforms, see log', [
+    RegKey,
+    Length(GetAllPlatforms)
+  ]));
 end;
 
 { initialization / finalization ---------------------------------------------- }
