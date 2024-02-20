@@ -32,11 +32,9 @@ end;
 type
   TTestDelphiIdeIntegration = class(TComponent)
   strict private
-    CgeMenu, ChangeEnginePathMenu, OpenEditorMenu, AddPathsMenu, RemovePathsMenu: TMenuItem;
-    procedure ClickChangeEnginePath(Sender: TObject);
-    procedure ClickOpenEditor(Sender: TObject);
-    procedure ClickAddPaths(Sender: TObject);
-    procedure ClickRemovePaths(Sender: TObject);
+    MenuMyRoot, MenuDebugProjectOptions, MenuDebugGlobalOptions: TMenuItem;
+    procedure ClickDebugProjectOptions(Sender: TObject);
+    procedure ClickDebugGlobalOptions(Sender: TObject);
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -69,30 +67,17 @@ begin
 
   IterateMenuItems(Services.MainMenu.Items, '');
 
-  ChangeEnginePathMenu := TMenuItem.Create(nil);
-  ChangeEnginePathMenu.Caption := 'Test Change Engine Path...';
-  // Configure the path of Castle Game Engine (should have subdirectories like src, examples).
-  ChangeEnginePathMenu.OnClick := ClickChangeEnginePath;
+  MenuDebugProjectOptions := TMenuItem.Create(nil);
+  MenuDebugProjectOptions.Caption := 'Debug Project Options';
+  MenuDebugProjectOptions.OnClick := ClickDebugProjectOptions;
 
-  OpenEditorMenu := TMenuItem.Create(nil);
-  OpenEditorMenu.Caption := 'Test Open Editor';
-  OpenEditorMenu.OnClick := ClickOpenEditor;
+  MenuDebugGlobalOptions := TMenuItem.Create(nil);
+  MenuDebugGlobalOptions.Caption := 'Debug Global Options';
+  MenuDebugGlobalOptions.OnClick := ClickDebugGlobalOptions;
 
-  AddPathsMenu := TMenuItem.Create(nil);
-  AddPathsMenu.Caption := 'Test Configure Currrent Project to Use Engine';
-  AddPathsMenu.OnClick := ClickAddPaths;
-
-  RemovePathsMenu := TMenuItem.Create(nil);
-  RemovePathsMenu.Caption := 'Test Remove Engine Configuration from the Currrent Project';
-  RemovePathsMenu.OnClick := ClickRemovePaths;
-
-  CgeMenu := TMenuItem.Create(nil);
-  CgeMenu.Caption := 'Test Castle Game Engine';
-  CgeMenu.Name := 'TestCastleGameEngineMenu';
-//  CgeMenu.Add(ChangeEnginePathMenu);
-//  CgeMenu.Add(OpenEditorMenu);
-//  CgeMenu.Add(AddPathsMenu);
-//  CgeMenu.Add(RemovePathsMenu);
+  MenuMyRoot := TMenuItem.Create(nil);
+  MenuMyRoot.Caption := 'Test Package Menu';
+  MenuMyRoot.Name := 'TestCastleGameEngineMenu';
 
   { Use hardcoded menu item name, like
     - ToolsToolsItem ("Configure Tools")
@@ -106,19 +91,17 @@ begin
     menu items that correspond to stuff confiured in "Configure Tools".
     E.g. this will not work reliably, stuff will disappear after Delphi restart:
 
-      Services.AddActionMenu('ToolsToolsItem', nil, CgeMenu, true, true);
+      Services.AddActionMenu('ToolsToolsItem', nil, MenuMyRoot, true, true);
 
     So a custom "Tools" submenu should be added before "Configure Tools". }
 
-  Services.AddActionMenu('ViewTranslationManagerMenu', nil, CgeMenu, true, false);
+  Services.AddActionMenu('ViewTranslationManagerMenu', nil, MenuMyRoot, true, false);
 
-  { We can add submenu items using CgeMenu.Add (see above) or by adding
+  { We can add submenu items using MenuMyRoot.Add or by adding
     using Services.AddActionMenu.
     There doesn't seem to be any difference. }
-  Services.AddActionMenu('TestCastleGameEngineMenu', nil, ChangeEnginePathMenu, true, true);
-  Services.AddActionMenu('TestCastleGameEngineMenu', nil, OpenEditorMenu, true, true);
-  Services.AddActionMenu('TestCastleGameEngineMenu', nil, AddPathsMenu, true, true);
-  Services.AddActionMenu('TestCastleGameEngineMenu', nil, RemovePathsMenu, true, true);
+  Services.AddActionMenu('TestCastleGameEngineMenu', nil, MenuDebugProjectOptions, true, true);
+  Services.AddActionMenu('TestCastleGameEngineMenu', nil, MenuDebugGlobalOptions, true, true);
 end;
 
 destructor TTestDelphiIdeIntegration.Destroy;
@@ -129,10 +112,10 @@ begin
 
   { Correct comment:
 
-    It seems that CgeMenu is not removed from ToolsMenu automatically when
+    It seems that MenuMyRoot is not removed from ToolsMenu automatically when
     TTestDelphiIdeIntegration instance is destroyed,
-    even when CgeMenu is owned by TTestDelphiIdeIntegration (was created as
-    "CgeMenu := TMenuItem.Create(Self)").
+    even when MenuMyRoot is owned by TTestDelphiIdeIntegration (was created as
+    "MenuMyRoot := TMenuItem.Create(Self)").
     Freing it explicitly here works.
 
     Note that we shouldn't free subitems like ChangeEnginePathMenu,
@@ -146,24 +129,12 @@ begin
     We create them all now with Owner=nil, to avoid confusion.
   }
 
-  FreeAndNil(CgeMenu);
-  // FreeAndNil(ChangeEnginePathMenu);
-  // FreeAndNil(OpenEditorMenu);
-  // FreeAndNil(AddPathsMenu);
-  // FreeAndNil(RemovePathsMenu);
+  FreeAndNil(MenuMyRoot);
 
   inherited;
 end;
 
-procedure TTestDelphiIdeIntegration.ClickChangeEnginePath(Sender: TObject);
-begin
-end;
-
-procedure TTestDelphiIdeIntegration.ClickOpenEditor(Sender: TObject);
-begin
-end;
-
-procedure TTestDelphiIdeIntegration.ClickAddPaths(Sender: TObject);
+procedure TTestDelphiIdeIntegration.ClickDebugProjectOptions(Sender: TObject);
 var
   OptionName: TOTAOptionName;
   ProjectOptions: IOTAProjectOptions;
@@ -202,8 +173,49 @@ begin
   finally FreeAndNil(Report) end;
 end;
 
-procedure TTestDelphiIdeIntegration.ClickRemovePaths(Sender: TObject);
+procedure TTestDelphiIdeIntegration.ClickDebugGlobalOptions(Sender: TObject);
+var
+  Services: IOTAServices;
+  EnvironmentOptions: IOTAEnvironmentOptions;
+  OptionName: TOTAOptionName;
+  Report: TStringList;
+  ReportFileName, ValueStr: String;
 begin
+  Report := TStringList.Create;
+  try
+    if not Supports(BorlandIDEServices, IOTAServices, Services) then
+      raise Exception.Create('Cannot access IOTAServices');
+    EnvironmentOptions := Services.GetEnvironmentOptions;
+    if EnvironmentOptions = nil then
+      raise Exception.Create('Cannot access IOTAEnvironmentOptions');
+
+    for OptionName in EnvironmentOptions.GetOptionNames do
+    begin
+      try
+        ValueStr := EnvironmentOptions.Values[OptionName.Name];
+      except
+        ValueStr := 'Error reading as String';
+      end;
+      Report.Append(Format('%s (%d): %s', [
+        OptionName.Name,
+        Ord(OptionName.Kind),
+        ValueStr
+      ]));
+    end;
+
+    ReportFileName := 'c:/tmp/' + IntToStr(Random(100000));
+
+    ShowMessage(Format('Found %d project options, saving to %s', [
+      Length(EnvironmentOptions.GetOptionNames),
+      ReportFileName
+    ]));
+
+    { Show message before actually writing to ReportFileName,
+      so that user knows what's going on in case of error
+      at writing (e.g. before directory doesn't exist or is read-only). }
+
+    Report.SaveToFile(ReportFileName);
+  finally FreeAndNil(Report) end;
 end;
 
 { initialization / finalization ---------------------------------------------- }
